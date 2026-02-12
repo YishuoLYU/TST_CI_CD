@@ -1,5 +1,5 @@
-# PR验证工作流 - 代码检查和单元测试
-# 当创建或更新Pull Request时自动运行
+# PR Validation Workflow - Code check and unit testing
+# Automatically runs when creating or updating Pull Requests
 
 name: PR Validation
 
@@ -12,71 +12,71 @@ on:
 
 jobs:
   code-quality:
-    name: 代码质量检查
+    name: Code Quality Check
     runs-on: ubuntu-latest
     
     steps:
-      - name: 检出代码
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # 完整历史记录用于增量检查
+          fetch-depth: 0  # Full history for incremental checks
       
-      - name: 设置Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
       
-      - name: 安装依赖
+      - name: Install dependencies
         run: npm ci
       
-      - name: 代码格式检查 (Prettier)
+      - name: Code format check (Prettier)
         run: npm run prettier:verify
       
-      - name: ESLint检查
+      - name: ESLint check
         run: npm run lint
       
-      - name: LWC单元测试
+      - name: LWC unit tests
         run: npm run test:unit:coverage
       
-      - name: 上传测试覆盖率报告
+      - name: Upload test coverage report
         uses: codecov/codecov-action@v4
         if: always()
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
 
-  # Salesforce语法验证（可选）
+  # Salesforce syntax validation (optional)
   salesforce-validation:
-    name: Salesforce语法验证
+    name: Salesforce Syntax Validation
     runs-on: ubuntu-latest
     
     steps:
-      - name: 检出代码
+      - name: Checkout code
         uses: actions/checkout@v4
       
-      - name: 安装Salesforce CLI
+      - name: Install Salesforce CLI
         run: |
           npm install -g @salesforce/cli
           sf version
       
-      - name: 授权到Sandbox环境（仅验证）
+      - name: Authorize to Sandbox environment (validation only)
         run: |
           echo "${{ secrets.SFDX_AUTH_URL_SANDBOX }}" > ./SFDX_AUTH_URL.txt
           sf org login sfdx-url --sfdx-url-file ./SFDX_AUTH_URL.txt --alias validation-org --set-default
           rm ./SFDX_AUTH_URL.txt
         if: ${{ secrets.SFDX_AUTH_URL_SANDBOX != '' }}
       
-      - name: 检查 force-app 目录
+      - name: Check force-app directory
         run: |
           if [ ! -d "force-app" ] || [ -z "$(find force-app -type f 2>/dev/null)" ]; then
-            echo "⚠️  force-app 目录为空，跳过 Salesforce 验证"
+            echo "⚠️  force-app directory is empty, skipping Salesforce validation"
             exit 0
           fi
-          echo "✅ force-app 目录检查通过"
+          echo "✅ force-app directory check passed"
         if: ${{ secrets.SFDX_AUTH_URL_SANDBOX != '' }}
       
-      - name: 部署验证（Check Only）
+      - name: Deploy validation (Check Only)
         run: |
           sf project deploy start --source-dir force-app --test-level RunLocalTests --dry-run --target-org validation-org
         if: ${{ secrets.SFDX_AUTH_URL_SANDBOX != '' }}
