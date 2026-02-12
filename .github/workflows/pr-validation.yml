@@ -1,0 +1,73 @@
+# PR验证工作流 - 代码检查和单元测试
+# 当创建或更新Pull Request时自动运行
+
+name: PR Validation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - main
+      - develop
+
+jobs:
+  code-quality:
+    name: 代码质量检查
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 完整历史记录用于增量检查
+      
+      - name: 设置Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: 安装依赖
+        run: npm ci
+      
+      - name: 代码格式检查 (Prettier)
+        run: npm run prettier:verify
+      
+      - name: ESLint检查
+        run: npm run lint
+      
+      - name: LWC单元测试
+        run: npm run test:unit:coverage
+      
+      - name: 上传测试覆盖率报告
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+
+  # Salesforce语法验证（可选）
+  salesforce-validation:
+    name: Salesforce语法验证
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+      
+      - name: 安装Salesforce CLI
+        run: |
+          npm install -g @salesforce/cli
+          sf version
+      
+      - name: 授权到Sandbox环境（仅验证）
+        run: |
+          echo "${{ secrets.SFDX_AUTH_URL_SANDBOX }}" > ./SFDX_AUTH_URL.txt
+          sf org login sfdx-url --sfdx-url-file ./SFDX_AUTH_URL.txt --alias validation-org --set-default
+          rm ./SFDX_AUTH_URL.txt
+        if: ${{ secrets.SFDX_AUTH_URL_SANDBOX != '' }}
+      
+      - name: 部署验证（Check Only）
+        run: |
+          sf project deploy start --source-dir force-app --test-level RunLocalTests --dry-run --target-org validation-org
+        if: ${{ secrets.SFDX_AUTH_URL_SANDBOX != '' }}

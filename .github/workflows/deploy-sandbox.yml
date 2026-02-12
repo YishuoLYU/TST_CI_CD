@@ -1,0 +1,69 @@
+# 自动部署到Sandbox环境
+# 当代码合并到develop分支时自动部署
+
+name: Deploy to Sandbox
+
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  deploy-to-sandbox:
+    name: 部署到Sandbox
+    runs-on: ubuntu-latest
+    environment:
+      name: Sandbox
+      url: https://test.salesforce.com
+    
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: 安装Salesforce CLI
+        run: |
+          npm install -g @salesforce/cli
+          sf version
+      
+      - name: 授权到Sandbox组织
+        run: |
+          echo "${{ secrets.SFDX_AUTH_URL_SANDBOX }}" > ./SFDX_AUTH_URL.txt
+          sf org login sfdx-url --sfdx-url-file ./SFDX_AUTH_URL.txt --alias sandbox-org --set-default
+          rm ./SFDX_AUTH_URL.txt
+      
+      - name: 部署源代码到Sandbox
+        run: |
+          sf project deploy start \
+            --source-dir force-app \
+            --test-level RunLocalTests \
+            --target-org sandbox-org \
+            --wait 30
+      
+      - name: 部署结果通知
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ 成功部署到Sandbox环境"
+          else
+            echo "❌ 部署到Sandbox失败"
+            exit 1
+          fi
+      
+      # 可选：运行Apex测试
+      - name: 运行Apex测试
+        if: success()
+        run: |
+          sf apex run test \
+            --test-level RunLocalTests \
+            --result-format human \
+            --code-coverage \
+            --target-org sandbox-org \
+            --wait 30
+      
+      - name: 获取部署详情
+        if: success()
+        run: |
+          sf org display --target-org sandbox-org

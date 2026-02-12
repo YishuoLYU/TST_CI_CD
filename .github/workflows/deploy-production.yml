@@ -1,0 +1,113 @@
+# 部署到Production环境
+# 当创建release标签或手动触发时部署到生产环境
+
+name: Deploy to Production
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # 例如: v1.0.0, v2.1.3
+  workflow_dispatch:  # 允许手动触发
+    inputs:
+      confirm:
+        description: '确认部署到生产环境 (输入 "DEPLOY" 确认)'
+        required: true
+        default: ''
+
+jobs:
+  # 验证确认输入（仅手动触发时）
+  validate-input:
+    name: 验证部署确认
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - name: 检查确认输入
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "DEPLOY" ]; then
+            echo "❌ 必须输入 'DEPLOY' 来确认生产环境部署"
+            exit 1
+          fi
+          echo "✅ 部署确认通过"
+
+  deploy-to-production:
+    name: 部署到Production
+    runs-on: ubuntu-latest
+    needs: [validate-input]
+    if: always() && (needs.validate-input.result == 'success' || github.event_name == 'push')
+    environment:
+      name: Production
+      url: https://login.salesforce.com
+    
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: 安装Salesforce CLI
+        run: |
+          npm install -g @salesforce/cli
+          sf version
+      
+      - name: 授权到Production组织
+        run: |
+          echo "${{ secrets.SFDX_AUTH_URL_PRODUCTION }}" > ./SFDX_AUTH_URL.txt
+          sf org login sfdx-url --sfdx-url-file ./SFDX_AUTH_URL.txt --alias production-org --set-default
+          rm ./SFDX_AUTH_URL.txt
+      
+      # 先进行验证部署（Check Only）
+      - name: 验证部署（Validation）
+        run: |
+          echo "🔍 开始验证部署..."
+          sf project deploy start \
+            --source-dir force-app \
+            --test-level RunLocalTests \
+            --dry-run \
+            --target-org production-org \
+            --wait 30
+      
+      # 真实部署
+      - name: 部署到Production
+        run: |
+          echo "🚀 开始部署到生产环境..."
+          sf project deploy start \
+            --source-dir force-app \
+            --test-level RunLocalTests \
+            --target-org production-org \
+            --wait 30
+      
+      - name: 运行所有测试
+        if: success()
+        run: |
+          echo "🧪 运行所有Apex测试..."
+          sf apex run test \
+            --test-level RunLocalTests \
+            --result-format human \
+            --code-coverage \
+            --target-org production-org \
+            --wait 30
+      
+      - name: 创建部署报告
+        if: always()
+        run: |
+          echo "## 部署报告" >> $GITHUB_STEP_SUMMARY
+          echo "- **环境**: Production" >> $GITHUB_STEP_SUMMARY
+          echo "- **分支/标签**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **提交**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **状态**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **时间**: $(date -u)" >> $GITHUB_STEP_SUMMARY
+      
+      - name: 部署结果通知
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ 成功部署到Production环境"
+          else
+            echo "❌ 部署到Production失败"
+            exit 1
+          fi
+      
+      - name: 获取部署详情
+        if: success()
+        run: |
+          sf org display --target-org production-org
