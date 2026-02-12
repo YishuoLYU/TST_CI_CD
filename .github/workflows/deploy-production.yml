@@ -55,6 +55,18 @@ jobs:
           sf org login sfdx-url --sfdx-url-file ./SFDX_AUTH_URL.txt --alias production-org --set-default
           rm ./SFDX_AUTH_URL.txt
       
+      - name: 检查 force-app 目录
+        run: |
+          if [ ! -d "force-app" ]; then
+            echo "❌ 错误: force-app 目录不存在"
+            exit 1
+          fi
+          if [ -z "$(find force-app -type f -name '*.cls' -o -name '*.trigger' -o -name '*.component' 2>/dev/null)" ]; then
+            echo "❌ 错误: force-app 目录中没有 Salesforce 源文件"
+            exit 1
+          fi
+          echo "✅ force-app 目录检查通过"
+      
       # 先进行验证部署（Check Only）
       - name: 验证部署（Validation）
         run: |

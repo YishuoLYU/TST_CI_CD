@@ -34,6 +34,20 @@ jobs:
           sf org login sfdx-url --sfdx-url-file ./SFDX_AUTH_URL.txt --alias sandbox-org --set-default
           rm ./SFDX_AUTH_URL.txt
       
+      - name: 检查 force-app 目录
+        run: |
+          if [ ! -d "force-app" ]; then
+            echo "⚠️  警告: force-app 目录不存在"
+            echo "跳过部署步骤"
+            exit 0
+          fi
+          if [ -z "$(find force-app -type f -name '*.cls' -o -name '*.trigger' -o -name '*.component' 2>/dev/null)" ]; then
+            echo "⚠️  警告: force-app 目录中没有 Salesforce 源文件"
+            echo "跳过部署步骤"
+            exit 0
+          fi
+          echo "✅ force-app 目录检查通过"
+      
       - name: 部署源代码到Sandbox
         run: |
           sf project deploy start \
