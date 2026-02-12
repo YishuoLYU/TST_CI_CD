@@ -1,5 +1,5 @@
-# 自动部署到Sandbox环境
-# 当代码合并到develop分支时自动部署
+# Automatic deployment to Sandbox environment
+# Deploys automatically when code is merged to develop branch
 
 name: Deploy to Sandbox
 
@@ -7,48 +7,48 @@ on:
   push:
     branches:
       - develop
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:  # Allow manual trigger
 
 jobs:
   deploy-to-sandbox:
-    name: 部署到Sandbox
+    name: Deploy to Sandbox
     runs-on: ubuntu-latest
     environment:
       name: Sandbox
       url: https://test.salesforce.com
     
     steps:
-      - name: 检出代码
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
       
-      - name: 安装Salesforce CLI
+      - name: Install Salesforce CLI
         run: |
           npm install -g @salesforce/cli
           sf version
       
-      - name: 授权到Sandbox组织
+      - name: Authorize to Sandbox org
         run: |
           echo "${{ secrets.SFDX_AUTH_URL_SANDBOX }}" > ./SFDX_AUTH_URL.txt
           sf org login sfdx-url --sfdx-url-file ./SFDX_AUTH_URL.txt --alias sandbox-org --set-default
           rm ./SFDX_AUTH_URL.txt
       
-      - name: 检查 force-app 目录
+      - name: Check force-app directory
         run: |
           if [ ! -d "force-app" ]; then
-            echo "⚠️  警告: force-app 目录不存在"
-            echo "跳过部署步骤"
+            echo "⚠️  Warning: force-app directory does not exist"
+            echo "Skipping deployment step"
             exit 0
           fi
           if [ -z "$(find force-app -type f -name '*.cls' -o -name '*.trigger' -o -name '*.component' 2>/dev/null)" ]; then
-            echo "⚠️  警告: force-app 目录中没有 Salesforce 源文件"
-            echo "跳过部署步骤"
+            echo "⚠️  Warning: No Salesforce source files in force-app directory"
+            echo "Skipping deployment step"
             exit 0
           fi
-          echo "✅ force-app 目录检查通过"
+          echo "✅ force-app directory check passed"
       
-      - name: 部署源代码到Sandbox
+      - name: Deploy source code to Sandbox
         run: |
           sf project deploy start \
             --source-dir force-app \
@@ -56,18 +56,18 @@ jobs:
             --target-org sandbox-org \
             --wait 30
       
-      - name: 部署结果通知
+      - name: Deployment result notification
         if: always()
         run: |
           if [ "${{ job.status }}" == "success" ]; then
-            echo "✅ 成功部署到Sandbox环境"
+            echo "✅ Successfully deployed to Sandbox environment"
           else
-            echo "❌ 部署到Sandbox失败"
+            echo "❌ Deployment to Sandbox failed"
             exit 1
           fi
       
-      # 可选：运行Apex测试
-      - name: 运行Apex测试
+      # Optional: Run Apex tests
+      - name: Run Apex tests
         if: success()
         run: |
           sf apex run test \
@@ -77,7 +77,7 @@ jobs:
             --target-org sandbox-org \
             --wait 30
       
-      - name: 获取部署详情
+      - name: Get deployment details
         if: success()
         run: |
           sf org display --target-org sandbox-org

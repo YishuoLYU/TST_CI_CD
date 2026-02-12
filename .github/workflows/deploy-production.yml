@@ -1,36 +1,36 @@
-# 部署到Production环境
-# 当创建release标签或手动触发时部署到生产环境
+# Deploy to Production environment
+# Deploys to production when creating release tags or manually triggered
 
 name: Deploy to Production
 
 on:
   push:
     tags:
-      - 'v*.*.*'  # 例如: v1.0.0, v2.1.3
-  workflow_dispatch:  # 允许手动触发
+      - 'v*.*.*'  # Example: v1.0.0, v2.1.3
+  workflow_dispatch:  # Allow manual trigger
     inputs:
       confirm:
-        description: '确认部署到生产环境 (输入 "DEPLOY" 确认)'
+        description: 'Confirm production deployment (enter "DEPLOY" to confirm)'
         required: true
         default: ''
 
 jobs:
-  # 验证确认输入（仅手动触发时）
+  # Validate confirmation input (manual trigger only)
   validate-input:
-    name: 验证部署确认
+    name: Validate Deployment Confirmation
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch'
     steps:
-      - name: 检查确认输入
+      - name: Check confirmation input
         run: |
           if [ "${{ github.event.inputs.confirm }}" != "DEPLOY" ]; then
-            echo "❌ 必须输入 'DEPLOY' 来确认生产环境部署"
+            echo "❌ Must enter 'DEPLOY' to confirm production deployment"
             exit 1
           fi
-          echo "✅ 部署确认通过"
+          echo "✅ Deployment confirmation passed"
 
   deploy-to-production:
-    name: 部署到Production
+    name: Deploy to Production
     runs-on: ubuntu-latest
     needs: [validate-input]
     if: always() && (needs.validate-input.result == 'success' || github.event_name == 'push')
@@ -39,38 +39,38 @@ jobs:
       url: https://login.salesforce.com
     
     steps:
-      - name: 检出代码
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
       
-      - name: 安装Salesforce CLI
+      - name: Install Salesforce CLI
         run: |
           npm install -g @salesforce/cli
           sf version
       
-      - name: 授权到Production组织
+      - name: Authorize to Production org
         run: |
           echo "${{ secrets.SFDX_AUTH_URL_PRODUCTION }}" > ./SFDX_AUTH_URL.txt
           sf org login sfdx-url --sfdx-url-file ./SFDX_AUTH_URL.txt --alias production-org --set-default
           rm ./SFDX_AUTH_URL.txt
       
-      - name: 检查 force-app 目录
+      - name: Check force-app directory
         run: |
           if [ ! -d "force-app" ]; then
-            echo "❌ 错误: force-app 目录不存在"
+            echo "❌ Error: force-app directory does not exist"
             exit 1
           fi
           if [ -z "$(find force-app -type f -name '*.cls' -o -name '*.trigger' -o -name '*.component' 2>/dev/null)" ]; then
-            echo "❌ 错误: force-app 目录中没有 Salesforce 源文件"
+            echo "❌ Error: No Salesforce source files in force-app directory"
             exit 1
           fi
-          echo "✅ force-app 目录检查通过"
+          echo "✅ force-app directory check passed"
       
-      # 先进行验证部署（Check Only）
-      - name: 验证部署（Validation）
+      # Validate deployment first (Check Only)
+      - name: Validate deployment
         run: |
-          echo "🔍 开始验证部署..."
+          echo "🔍 Starting deployment validation..."
           sf project deploy start \
             --source-dir force-app \
             --test-level RunLocalTests \
@@ -78,20 +78,20 @@ jobs:
             --target-org production-org \
             --wait 30
       
-      # 真实部署
-      - name: 部署到Production
+      # Actual deployment
+      - name: Deploy to Production
         run: |
-          echo "🚀 开始部署到生产环境..."
+          echo "🚀 Starting deployment to production environment..."
           sf project deploy start \
             --source-dir force-app \
             --test-level RunLocalTests \
             --target-org production-org \
             --wait 30
       
-      - name: 运行所有测试
+      - name: Run all tests
         if: success()
         run: |
-          echo "🧪 运行所有Apex测试..."
+          echo "🧪 Running all Apex tests..."
           sf apex run test \
             --test-level RunLocalTests \
             --result-format human \
@@ -99,27 +99,27 @@ jobs:
             --target-org production-org \
             --wait 30
       
-      - name: 创建部署报告
+      - name: Create deployment report
         if: always()
         run: |
-          echo "## 部署报告" >> $GITHUB_STEP_SUMMARY
-          echo "- **环境**: Production" >> $GITHUB_STEP_SUMMARY
-          echo "- **分支/标签**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **提交**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **状态**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **时间**: $(date -u)" >> $GITHUB_STEP_SUMMARY
+          echo "## Deployment Report" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: Production" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch/Tag**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Time**: $(date -u)" >> $GITHUB_STEP_SUMMARY
       
-      - name: 部署结果通知
+      - name: Deployment result notification
         if: always()
         run: |
           if [ "${{ job.status }}" == "success" ]; then
-            echo "✅ 成功部署到Production环境"
+            echo "✅ Successfully deployed to Production environment"
           else
-            echo "❌ 部署到Production失败"
+            echo "❌ Deployment to Production failed"
             exit 1
           fi
       
-      - name: 获取部署详情
+      - name: Get deployment details
         if: success()
         run: |
           sf org display --target-org production-org
